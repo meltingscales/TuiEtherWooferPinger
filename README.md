@@ -2,6 +2,8 @@
 
 A terminal-based ICMP ping monitoring tool that parses nmap XML output and displays real-time ping statistics in a beautiful interactive interface.
 
+![](./tui1.png)
+
 ## Features
 
 - Parse nmap XML output files to extract host IP addresses
