@@ -21,9 +21,13 @@ run:
 run-release:
     sudo ./target/release/tui-ether-pinger
 
-# Run with a custom XML file
+# Run with a custom XML file (debug mode)
 run-xml FILE:
     sudo cargo run -- {{FILE}}
+
+# Run with a custom XML file (release mode)
+run-xml-release FILE:
+    sudo ./target/release/tui-ether-pinger {{FILE}}
 
 # Check the project for errors without building
 check:

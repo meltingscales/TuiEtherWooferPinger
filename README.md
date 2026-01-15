@@ -51,7 +51,14 @@ nmap 192.168.2.1/24 -p80 -oX output.xml
 
 2. Run the TUI pinger:
 ```bash
+# Use default output.xml
 sudo ./target/release/tui-ether-pinger
+
+# Or specify a custom XML file
+sudo ./target/release/tui-ether-pinger nmapoutput.xml
+
+# Using justfile
+just run-xml nmapoutput.xml
 ```
 
 ### Controls

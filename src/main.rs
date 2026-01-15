@@ -20,10 +20,13 @@ async fn main() -> Result<()> {
     // Setup panic hook to restore terminal
     setup_panic_hook();
 
-    // Parse XML file
-    let xml_path = "output.xml";
-    let ips = parser::parse_nmap_xml(xml_path)
-        .context("Failed to parse nmap XML. Make sure output.xml exists.")?;
+    // Parse XML file (from CLI arg or default to output.xml)
+    let xml_path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "output.xml".to_string());
+
+    let ips = parser::parse_nmap_xml(&xml_path)
+        .context(format!("Failed to parse nmap XML: {}", xml_path))?;
 
     if ips.is_empty() {
         eprintln!("No hosts found in {}. Please run nmap first.", xml_path);
