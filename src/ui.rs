@@ -56,9 +56,17 @@ fn render_host_list(app: &App, frame: &mut Frame, area: Rect) {
         })
         .collect();
 
+    // Count selected hosts
+    let selected_count = app.hosts.iter().filter(|h| h.selected).count();
+    let title = format!(
+        "Hosts ({}/{})",
+        selected_count,
+        app.hosts.len()
+    );
+
     let list = List::new(items).block(
         Block::default()
-            .title("Hosts (Space: toggle, ↑↓: navigate)")
+            .title(title)
             .borders(Borders::ALL),
     );
 
@@ -181,12 +189,14 @@ fn render_help(app: &App, frame: &mut Frame, area: Rect) {
         Span::raw(": nav | "),
         Span::styled("Space", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": toggle | "),
-        Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(": pause | "),
         Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": all | "),
         Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": none | "),
+        Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": pause | "),
+        Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": export | "),
     ];
 
     if app.paused {

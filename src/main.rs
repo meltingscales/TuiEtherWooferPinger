@@ -145,9 +145,10 @@ fn print_help() {
     println!("CONTROLS:");
     println!("    ↑/↓ or k/j          Navigate host list");
     println!("    Space               Toggle selection (start/stop monitoring)");
-    println!("    p                   Pause/resume all monitoring");
     println!("    a                   Select all hosts");
     println!("    d                   Deselect all hosts");
+    println!("    p                   Pause/resume all monitoring");
+    println!("    s                   Export statistics to CSV file");
     println!("    q or Esc            Quit");
     println!();
     println!("EXAMPLES:");

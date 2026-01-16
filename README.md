@@ -108,7 +108,10 @@ just ci                           # Run all CI checks
 
 - `↑` / `↓` or `k` / `j` - Navigate up/down through host list
 - `Space` - Toggle selection (start/stop monitoring)
+- `a` - Select all hosts
+- `d` - Deselect all hosts
 - `p` - Pause/resume all monitoring
+- `s` - Export statistics to CSV file (timestamped)
 - `q` or `Esc` - Quit application
 
 ### Interface Layout
@@ -225,6 +228,22 @@ Press `p` at any time to pause all monitoring. This is useful when:
 - Compare results before/after network changes
 
 When paused, all active tasks are stopped. Pressing `p` again resumes monitoring for all previously selected hosts.
+
+### Statistics Export
+
+Press `s` at any time to export current statistics to a CSV file. Files are named with timestamps (e.g., `stats_export_20260115_143052.csv`).
+
+**ICMP mode exports:**
+- IP, Status, Latencies (last/avg/min/max), Packet Loss %, Packets sent/received
+
+**HTTP mode exports:**
+- IP, Status, Status Code, Response Times (last/avg/min/max), Content Size, Success Rate %, Requests sent/successful, Last Error
+
+This is useful for:
+- Creating reports of network health over time
+- Comparing performance before/after network changes
+- Long-term monitoring and analysis
+- Sharing results with team members
 
 ## License
 

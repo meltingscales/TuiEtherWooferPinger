@@ -3,9 +3,12 @@ use crate::http_stats::HttpStats;
 use crate::pinger;
 use crate::stats::{AppMode, PingStats, Stats};
 use anyhow::Result;
+use chrono::Local;
 use crossterm::event::{KeyCode, KeyEvent};
 use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -87,6 +90,9 @@ impl App {
             }
             KeyCode::Char('d') => {
                 self.deselect_all();
+            }
+            KeyCode::Char('s') => {
+                self.export_stats()?;
             }
             _ => {}
         }
@@ -214,6 +220,107 @@ impl App {
         for host in &mut self.hosts {
             host.selected = false;
         }
+    }
+
+    fn export_stats(&self) -> Result<()> {
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("stats_export_{}.csv", timestamp);
+
+        let mut file = File::create(&filename)?;
+
+        // Write header based on mode
+        match self.mode {
+            AppMode::Icmp => {
+                writeln!(
+                    file,
+                    "IP,Status,Last Latency (ms),Avg Latency (ms),Min Latency (ms),Max Latency (ms),Packet Loss %,Packets Sent,Packets Received"
+                )?;
+
+                let stats_lock = self.stats.read();
+                for host in &self.hosts {
+                    if let Some(Stats::Ping(stats)) = stats_lock.get(&host.ip) {
+                        writeln!(
+                            file,
+                            "{},{:?},{},{},{},{},{:.2},{},{}",
+                            host.ip,
+                            stats.status,
+                            stats
+                                .last_latency
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .avg_latency
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .min_latency
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .max_latency
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats.packet_loss_percent,
+                            stats.packets_sent,
+                            stats.packets_received
+                        )?;
+                    }
+                }
+            }
+            AppMode::Http => {
+                writeln!(
+                    file,
+                    "IP,Status,Status Code,Last Response Time (ms),Avg Response Time (ms),Min Response Time (ms),Max Response Time (ms),Content Size,Success Rate %,Requests Sent,Requests Successful,Last Error"
+                )?;
+
+                let stats_lock = self.stats.read();
+                for host in &self.hosts {
+                    if let Some(Stats::Http(stats)) = stats_lock.get(&host.ip) {
+                        writeln!(
+                            file,
+                            "{},{:?},{},{},{},{},{},{},{:.2},{},{},{}",
+                            host.ip,
+                            stats.status,
+                            stats
+                                .last_status_code
+                                .map(|c| c.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .last_response_time
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .avg_response_time
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .min_response_time
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .max_response_time
+                                .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats
+                                .last_content_size
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| "-".to_string()),
+                            stats.success_rate_percent,
+                            stats.requests_sent,
+                            stats.requests_successful,
+                            stats
+                                .last_error
+                                .as_ref()
+                                .map(|e| format!("\"{}\"", e.replace('"', "'")))
+                                .unwrap_or_else(|| "-".to_string())
+                        )?;
+                    }
+                }
+            }
+        }
+
+        // Write success - we can't show a message in the TUI easily, but the file is created
+        Ok(())
     }
 
     pub async fn shutdown(&mut self) {
