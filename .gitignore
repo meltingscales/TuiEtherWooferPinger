@@ -16,3 +16,6 @@ Thumbs.db
 # Test data (keep example XML files if desired)
 *.xml
 !example*.xml
+
+# Exported statistics
+stats_export_*.csv
