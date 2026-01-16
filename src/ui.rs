@@ -178,13 +178,15 @@ fn render_help(app: &App, frame: &mut Frame, area: Rect) {
         Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": quit | "),
         Span::styled("↑↓", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(": navigate | "),
+        Span::raw(": nav | "),
         Span::styled("Space", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": toggle | "),
         Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": pause | "),
-        Span::styled("🔌", Style::default().fg(Color::Cyan)),
-        Span::raw(": checking | "),
+        Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": all | "),
+        Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": none | "),
     ];
 
     if app.paused {

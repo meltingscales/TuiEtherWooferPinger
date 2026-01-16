@@ -82,6 +82,12 @@ impl App {
             KeyCode::Char('p') => {
                 self.toggle_pause();
             }
+            KeyCode::Char('a') => {
+                self.select_all();
+            }
+            KeyCode::Char('d') => {
+                self.deselect_all();
+            }
             _ => {}
         }
         Ok(())
@@ -177,6 +183,36 @@ impl App {
         // Abort the task
         if let Some(handle) = self.task_handles.remove(&ip) {
             handle.abort();
+        }
+    }
+
+    fn select_all(&mut self) {
+        if self.paused {
+            // Just mark as selected, don't start tasks
+            for host in &mut self.hosts {
+                host.selected = true;
+            }
+        } else {
+            // Mark as selected and start tasks
+            for i in 0..self.hosts.len() {
+                let ip = self.hosts[i].ip;
+                if !self.hosts[i].selected {
+                    self.hosts[i].selected = true;
+                    self.start_task(ip);
+                }
+            }
+        }
+    }
+
+    fn deselect_all(&mut self) {
+        // Stop all tasks and mark as not selected
+        let ips: Vec<IpAddr> = self.hosts.iter().map(|h| h.ip).collect();
+        for ip in ips {
+            self.stop_task(ip);
+        }
+
+        for host in &mut self.hosts {
+            host.selected = false;
         }
     }
 

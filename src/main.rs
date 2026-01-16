@@ -32,6 +32,10 @@ async fn main() -> Result<()> {
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
+            "--help" | "-h" => {
+                print_help();
+                return Ok(());
+            }
             "--http" => mode = AppMode::Http,
             "--port" => {
                 i += 1;
@@ -49,9 +53,7 @@ async fn main() -> Result<()> {
             path if !path.starts_with("--") => xml_path = path.to_string(),
             _ => {
                 eprintln!("Unknown option: {}", args[i]);
-                eprintln!("Usage: tui-ether-pinger [--http] [--port PORT] [xml-file]");
-                eprintln!("  --http          Use HTTP checking mode (default: ICMP ping)");
-                eprintln!("  --port PORT     Port to check (default: 80, HTTP mode only)");
+                print_help();
                 return Ok(());
             }
         }
@@ -124,4 +126,44 @@ fn setup_panic_hook() {
         // Call original hook
         original_hook(panic_info);
     }));
+}
+
+fn print_help() {
+    println!("TUI Ether Pinger 🔌 - Network monitoring with ICMP and HTTP modes");
+    println!();
+    println!("USAGE:");
+    println!("    tui-ether-pinger [OPTIONS] [XML_FILE]");
+    println!();
+    println!("OPTIONS:");
+    println!("    --http              Use HTTP checking mode (default: ICMP ping)");
+    println!("    --port PORT         Port to check (default: 80, HTTP mode only)");
+    println!("    -h, --help          Print this help message");
+    println!();
+    println!("ARGS:");
+    println!("    <XML_FILE>          Path to nmap XML output file (default: output.xml)");
+    println!();
+    println!("CONTROLS:");
+    println!("    ↑/↓ or k/j          Navigate host list");
+    println!("    Space               Toggle selection (start/stop monitoring)");
+    println!("    p                   Pause/resume all monitoring");
+    println!("    a                   Select all hosts");
+    println!("    d                   Deselect all hosts");
+    println!("    q or Esc            Quit");
+    println!();
+    println!("EXAMPLES:");
+    println!("    # ICMP ping mode (default)");
+    println!("    sudo tui-ether-pinger");
+    println!();
+    println!("    # HTTP mode on port 80");
+    println!("    sudo tui-ether-pinger --http");
+    println!();
+    println!("    # HTTP mode on custom port");
+    println!("    sudo tui-ether-pinger --http --port 8080");
+    println!();
+    println!("    # With custom nmap XML file");
+    println!("    sudo tui-ether-pinger --http --port 443 scan_results.xml");
+    println!();
+    println!("NOTE:");
+    println!("    ICMP requires raw socket access. Run with sudo or set CAP_NET_RAW:");
+    println!("    sudo setcap cap_net_raw+ep ./tui-ether-pinger");
 }
