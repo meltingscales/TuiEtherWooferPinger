@@ -1,4 +1,6 @@
 mod app;
+mod http_checker;
+mod http_stats;
 mod parser;
 mod pinger;
 mod stats;
@@ -12,6 +14,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use stats::AppMode;
 use std::io;
 use std::time::Duration;
 
@@ -20,11 +23,42 @@ async fn main() -> Result<()> {
     // Setup panic hook to restore terminal
     setup_panic_hook();
 
-    // Parse XML file (from CLI arg or default to output.xml)
-    let xml_path = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "output.xml".to_string());
+    // Parse command-line arguments
+    let args: Vec<String> = std::env::args().collect();
+    let mut mode = AppMode::Icmp;
+    let mut port = 80;
+    let mut xml_path = "output.xml".to_string();
 
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--http" => mode = AppMode::Http,
+            "--port" => {
+                i += 1;
+                if i < args.len() {
+                    port = args[i].parse().unwrap_or_else(|_| {
+                        eprintln!("Invalid port number: {}", args[i]);
+                        eprintln!("Using default port 80");
+                        80
+                    });
+                } else {
+                    eprintln!("--port requires a value");
+                    return Ok(());
+                }
+            }
+            path if !path.starts_with("--") => xml_path = path.to_string(),
+            _ => {
+                eprintln!("Unknown option: {}", args[i]);
+                eprintln!("Usage: tui-ether-pinger [--http] [--port PORT] [xml-file]");
+                eprintln!("  --http          Use HTTP checking mode (default: ICMP ping)");
+                eprintln!("  --port PORT     Port to check (default: 80, HTTP mode only)");
+                return Ok(());
+            }
+        }
+        i += 1;
+    }
+
+    // Parse XML file
     let ips = parser::parse_nmap_xml(&xml_path)
         .context(format!("Failed to parse nmap XML: {}", xml_path))?;
 
@@ -33,8 +67,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Create app
-    let mut app = App::new(ips);
+    // Create app with selected mode and port
+    let mut app = App::new(ips, mode, port);
 
     // Setup terminal
     enable_raw_mode()?;

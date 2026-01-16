@@ -29,6 +29,30 @@ run-xml FILE:
 run-xml-release FILE:
     sudo ./target/release/tui-ether-pinger {{FILE}}
 
+# Run HTTP checker mode (debug mode)
+run-web-80:
+    sudo cargo run -- --http
+
+# Run HTTP checker mode (release mode)
+run-web-80-release:
+    sudo ./target/release/tui-ether-pinger --http
+
+# Run HTTP checker with custom XML file (debug mode)
+run-web-80-xml FILE:
+    sudo cargo run -- --http {{FILE}}
+
+# Run HTTP checker with custom XML file (release mode)
+run-web-80-xml-release FILE:
+    sudo ./target/release/tui-ether-pinger --http {{FILE}}
+
+# Run HTTP checker on custom port (e.g. 8080)
+run-web-port PORT:
+    sudo cargo run -- --http --port {{PORT}}
+
+# Run HTTP checker on custom port (release)
+run-web-port-release PORT:
+    sudo ./target/release/tui-ether-pinger --http --port {{PORT}}
+
 # Check the project for errors without building
 check:
     cargo check

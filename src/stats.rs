@@ -1,8 +1,21 @@
+use crate::http_stats::HttpStats;
 use chrono::{DateTime, Local};
 use std::collections::VecDeque;
 use std::time::Duration;
 
 const MAX_SAMPLES: usize = 100;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AppMode {
+    Icmp,
+    Http,
+}
+
+#[derive(Clone, Debug)]
+pub enum Stats {
+    Ping(PingStats),
+    Http(HttpStats),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PingStatus {

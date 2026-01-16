@@ -1,4 +1,4 @@
-use crate::stats::PingStats;
+use crate::stats::Stats;
 use parking_lot::RwLock;
 use rand::Rng;
 use std::collections::HashMap;
@@ -10,7 +10,7 @@ use surge_ping::{Client, Config, PingIdentifier, PingSequence};
 /// Start an async ping task for a specific IP address
 pub async fn start_ping_task(
     ip: IpAddr,
-    stats: Arc<RwLock<HashMap<IpAddr, PingStats>>>,
+    stats: Arc<RwLock<HashMap<IpAddr, Stats>>>,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
 ) {
     // Create ping client
@@ -46,7 +46,7 @@ pub async fn start_ping_task(
                 // Update statistics
                 {
                     let mut stats_lock = stats.write();
-                    if let Some(host_stats) = stats_lock.get_mut(&ip) {
+                    if let Some(Stats::Ping(host_stats)) = stats_lock.get_mut(&ip) {
                         host_stats.update(latency);
                     }
                 }

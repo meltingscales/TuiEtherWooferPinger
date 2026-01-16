@@ -1,5 +1,6 @@
 use crate::app::App;
-use crate::stats::PingStatus;
+use crate::http_stats::HttpStatus;
+use crate::stats::{AppMode, PingStatus, Stats};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -24,8 +25,13 @@ pub fn render(app: &App, frame: &mut Frame) {
         .split(chunks[0]);
 
     render_host_list(app, frame, main_chunks[0]);
-    render_stats_panel(app, frame, main_chunks[1]);
-    render_help(frame, chunks[1]);
+
+    match app.mode {
+        AppMode::Icmp => render_ping_stats_panel(app, frame, main_chunks[1]),
+        AppMode::Http => render_http_stats_panel(app, frame, main_chunks[1]),
+    }
+
+    render_help(app, frame, chunks[1]);
 }
 
 fn render_host_list(app: &App, frame: &mut Frame, area: Rect) {
@@ -59,8 +65,8 @@ fn render_host_list(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(list, area);
 }
 
-fn render_stats_panel(app: &App, frame: &mut Frame, area: Rect) {
-    let stats_lock = app.ping_stats.read();
+fn render_ping_stats_panel(app: &App, frame: &mut Frame, area: Rect) {
+    let stats_lock = app.stats.read();
 
     // Build table rows for selected hosts
     let rows: Vec<Row> = app
@@ -68,7 +74,7 @@ fn render_stats_panel(app: &App, frame: &mut Frame, area: Rect) {
         .iter()
         .filter(|h| h.selected)
         .filter_map(|host| {
-            stats_lock.get(&host.ip).map(|stats| {
+            if let Some(Stats::Ping(stats)) = stats_lock.get(&host.ip) {
                 let status_style = match stats.status {
                     PingStatus::Active => Style::default().fg(Color::Green),
                     PingStatus::Timeout => Style::default().fg(Color::Red),
@@ -76,16 +82,18 @@ fn render_stats_panel(app: &App, frame: &mut Frame, area: Rect) {
                     PingStatus::NotStarted => Style::default().fg(Color::Gray),
                 };
 
-                Row::new(vec![
+                Some(Row::new(vec![
                     host.ip.to_string(),
-                    format_status(&stats.status),
-                    format_latency(stats.last_latency),
-                    format_latency(stats.avg_latency),
+                    format_ping_status(&stats.status),
+                    format_duration(stats.last_latency),
+                    format_duration(stats.avg_latency),
                     format!("{:.1}%", stats.packet_loss_percent),
                     format!("{}/{}", stats.packets_received, stats.packets_sent),
                 ])
-                .style(status_style)
-            })
+                .style(status_style))
+            } else {
+                None
+            }
         })
         .collect();
 
@@ -108,24 +116,92 @@ fn render_stats_panel(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_widget(table, area);
 }
 
-fn render_help(frame: &mut Frame, area: Rect) {
-    let help_text = Line::from(vec![
+fn render_http_stats_panel(app: &App, frame: &mut Frame, area: Rect) {
+    let stats_lock = app.stats.read();
+
+    // Build table rows for selected hosts
+    let rows: Vec<Row> = app
+        .hosts
+        .iter()
+        .filter(|h| h.selected)
+        .filter_map(|host| {
+            if let Some(Stats::Http(stats)) = stats_lock.get(&host.ip) {
+                let status_style = match stats.status {
+                    HttpStatus::Success => Style::default().fg(Color::Green),
+                    HttpStatus::ClientError => Style::default().fg(Color::Yellow),
+                    HttpStatus::ServerError | HttpStatus::NetworkError =>
+                        Style::default().fg(Color::Red),
+                    HttpStatus::NotStarted => Style::default().fg(Color::Gray),
+                };
+
+                Some(Row::new(vec![
+                    host.ip.to_string(),
+                    format_http_status(stats.last_status_code, &stats.status),
+                    format_duration(stats.last_response_time),
+                    format_duration(stats.avg_response_time),
+                    format_size(stats.last_content_size),
+                    format_error(&stats.last_error),
+                ])
+                .style(status_style))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let header = Row::new(vec!["IP", "Status", "Last", "Avg", "Size", "Error"])
+        .style(Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED));
+
+    let widths = [
+        Constraint::Length(20),  // IP
+        Constraint::Length(12),  // Status
+        Constraint::Length(10),  // Last
+        Constraint::Length(10),  // Avg
+        Constraint::Length(10),  // Size
+        Constraint::Length(30),  // Error
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::default().title("HTTP Statistics").borders(Borders::ALL));
+
+    frame.render_widget(table, area);
+}
+
+fn render_help(app: &App, frame: &mut Frame, area: Rect) {
+    let mode_text = match app.mode {
+        AppMode::Icmp => "ICMP".to_string(),
+        AppMode::Http => format!("HTTP:{}", app.port),
+    };
+
+    let mut spans = vec![
         Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": quit | "),
         Span::styled("↑↓", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": navigate | "),
         Span::styled("Space", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": toggle | "),
+        Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": pause | "),
         Span::styled("🔌", Style::default().fg(Color::Cyan)),
-        Span::raw(": pinging"),
-    ]);
+        Span::raw(": checking | "),
+    ];
 
+    if app.paused {
+        spans.push(Span::styled("⏸ PAUSED", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+        spans.push(Span::raw(" | "));
+    }
+
+    spans.push(Span::raw("Mode: "));
+    spans.push(Span::styled(&mode_text, Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)));
+
+    let help_text = Line::from(spans);
     let paragraph = Paragraph::new(help_text).block(Block::default().borders(Borders::ALL));
 
     frame.render_widget(paragraph, area);
 }
 
-fn format_status(status: &PingStatus) -> String {
+fn format_ping_status(status: &PingStatus) -> String {
     match status {
         PingStatus::NotStarted => "Not Started".to_string(),
         PingStatus::Active => "Active".to_string(),
@@ -134,9 +210,51 @@ fn format_status(status: &PingStatus) -> String {
     }
 }
 
-fn format_latency(latency: Option<Duration>) -> String {
-    match latency {
+fn format_http_status(code: Option<u16>, status: &HttpStatus) -> String {
+    match code {
+        Some(c) => {
+            let text = match c {
+                200 => "OK",
+                404 => "Not Found",
+                500 => "Server Err",
+                _ => "",
+            };
+            if text.is_empty() {
+                format!("{}", c)
+            } else {
+                format!("{} {}", c, text)
+            }
+        }
+        None => format!("{:?}", status),
+    }
+}
+
+fn format_duration(duration: Option<Duration>) -> String {
+    match duration {
         Some(d) => format!("{:.1}ms", d.as_secs_f64() * 1000.0),
+        None => "-".to_string(),
+    }
+}
+
+fn format_size(size: Option<u64>) -> String {
+    match size {
+        Some(s) if s > 1024 * 1024 => format!("{:.1}MB", s as f64 / (1024.0 * 1024.0)),
+        Some(s) if s > 1024 => format!("{:.1}KB", s as f64 / 1024.0),
+        Some(s) => format!("{}B", s),
+        None => "-".to_string(),
+    }
+}
+
+fn format_error(error: &Option<String>) -> String {
+    match error {
+        Some(e) => {
+            // Truncate long errors
+            if e.len() > 28 {
+                format!("{}...", &e[..28])
+            } else {
+                e.clone()
+            }
+        }
         None => "-".to_string(),
     }
 }

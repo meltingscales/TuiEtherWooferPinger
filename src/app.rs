@@ -1,5 +1,7 @@
+use crate::http_checker;
+use crate::http_stats::HttpStats;
 use crate::pinger;
-use crate::stats::PingStats;
+use crate::stats::{AppMode, PingStats, Stats};
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use parking_lot::RwLock;
@@ -15,16 +17,19 @@ pub struct Host {
 }
 
 pub struct App {
+    pub mode: AppMode,
+    pub port: u16,
     pub hosts: Vec<Host>,
     pub selected_index: usize,
-    pub ping_stats: Arc<RwLock<HashMap<IpAddr, PingStats>>>,
+    pub stats: Arc<RwLock<HashMap<IpAddr, Stats>>>,
     pub should_quit: bool,
-    ping_handles: HashMap<IpAddr, tokio::task::JoinHandle<()>>,
+    pub paused: bool,
+    task_handles: HashMap<IpAddr, tokio::task::JoinHandle<()>>,
     shutdown_senders: HashMap<IpAddr, watch::Sender<bool>>,
 }
 
 impl App {
-    pub fn new(ips: Vec<IpAddr>) -> Self {
+    pub fn new(ips: Vec<IpAddr>, mode: AppMode, port: u16) -> Self {
         let hosts: Vec<Host> = ips
             .into_iter()
             .map(|ip| Host {
@@ -33,22 +38,29 @@ impl App {
             })
             .collect();
 
-        let ping_stats = Arc::new(RwLock::new(HashMap::new()));
+        let stats_map = Arc::new(RwLock::new(HashMap::new()));
 
-        // Initialize stats for all hosts
+        // Initialize stats for all hosts based on mode
         {
-            let mut stats = ping_stats.write();
+            let mut stats = stats_map.write();
             for host in &hosts {
-                stats.insert(host.ip, PingStats::new());
+                let stat = match mode {
+                    AppMode::Icmp => Stats::Ping(PingStats::new()),
+                    AppMode::Http => Stats::Http(HttpStats::new()),
+                };
+                stats.insert(host.ip, stat);
             }
         }
 
         Self {
+            mode,
+            port,
             hosts,
             selected_index: 0,
-            ping_stats,
+            stats: stats_map,
             should_quit: false,
-            ping_handles: HashMap::new(),
+            paused: false,
+            task_handles: HashMap::new(),
             shutdown_senders: HashMap::new(),
         }
     }
@@ -66,6 +78,9 @@ impl App {
             }
             KeyCode::Char(' ') => {
                 self.toggle_selection();
+            }
+            KeyCode::Char('p') => {
+                self.toggle_pause();
             }
             _ => {}
         }
@@ -92,16 +107,43 @@ impl App {
 
         self.hosts[self.selected_index].selected = !selected;
 
-        if !selected {
-            self.start_ping_task(ip);
-        } else {
-            self.stop_ping_task(ip);
+        // Only start/stop tasks if not paused
+        if !self.paused {
+            if !selected {
+                self.start_task(ip);
+            } else {
+                self.stop_task(ip);
+            }
         }
     }
 
-    fn start_ping_task(&mut self, ip: IpAddr) {
+    fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+
+        if self.paused {
+            // Stop all running tasks
+            let ips: Vec<IpAddr> = self.task_handles.keys().copied().collect();
+            for ip in ips {
+                self.stop_task(ip);
+            }
+        } else {
+            // Restart tasks for all selected hosts
+            let selected_ips: Vec<IpAddr> = self
+                .hosts
+                .iter()
+                .filter(|h| h.selected)
+                .map(|h| h.ip)
+                .collect();
+
+            for ip in selected_ips {
+                self.start_task(ip);
+            }
+        }
+    }
+
+    fn start_task(&mut self, ip: IpAddr) {
         // Don't start if already running
-        if self.ping_handles.contains_key(&ip) {
+        if self.task_handles.contains_key(&ip) {
             return;
         }
 
@@ -109,34 +151,40 @@ impl App {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
         // Clone Arc for the async task
-        let stats = Arc::clone(&self.ping_stats);
+        let stats = Arc::clone(&self.stats);
+        let port = self.port;
 
-        // Spawn ping task
-        let handle = tokio::spawn(async move {
-            pinger::start_ping_task(ip, stats, shutdown_rx).await;
-        });
+        // Spawn task based on mode
+        let handle = match self.mode {
+            AppMode::Icmp => tokio::spawn(async move {
+                pinger::start_ping_task(ip, stats, shutdown_rx).await;
+            }),
+            AppMode::Http => tokio::spawn(async move {
+                http_checker::start_http_task(ip, port, stats, shutdown_rx).await;
+            }),
+        };
 
-        self.ping_handles.insert(ip, handle);
+        self.task_handles.insert(ip, handle);
         self.shutdown_senders.insert(ip, shutdown_tx);
     }
 
-    fn stop_ping_task(&mut self, ip: IpAddr) {
+    fn stop_task(&mut self, ip: IpAddr) {
         // Send shutdown signal
         if let Some(sender) = self.shutdown_senders.remove(&ip) {
             let _ = sender.send(true);
         }
 
         // Abort the task
-        if let Some(handle) = self.ping_handles.remove(&ip) {
+        if let Some(handle) = self.task_handles.remove(&ip) {
             handle.abort();
         }
     }
 
     pub async fn shutdown(&mut self) {
-        // Stop all ping tasks
-        let ips: Vec<IpAddr> = self.ping_handles.keys().copied().collect();
+        // Stop all tasks
+        let ips: Vec<IpAddr> = self.task_handles.keys().copied().collect();
         for ip in ips {
-            self.stop_ping_task(ip);
+            self.stop_task(ip);
         }
 
         // Give tasks a moment to clean up
